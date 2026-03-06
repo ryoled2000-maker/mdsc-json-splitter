@@ -1,447 +1,832 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MDSC JSON Splitter — 履歴分割ツール</title>
-  <meta name="description" content="ChatGPT・Claude のJSONエクスポートを指定サイズに分割するツール">
-  <style>
-    /* ============================================================
-       ★ URL設定は <script> 内の CONFIG を編集
-       ============================================================ */
-    :root {
-      --bg: #0a0e17; --surface: #111827; --border: #1f2937;
-      --accent: #06b6d4; --accent2: #8b5cf6;
-      --text: #e5e7eb; --text2: #9ca3af;
-      --success: #10b981; --warn: #f59e0b; --danger: #ef4444;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      background: var(--bg); color: var(--text);
-      min-height: 100vh; padding: 20px;
-    }
-    .container { max-width: 800px; margin: 0 auto; }
-    .header {
-      text-align: center; margin-bottom: 30px; padding: 20px;
-      background: linear-gradient(135deg, rgba(6,182,212,0.1), rgba(139,92,246,0.1));
-      border: 1px solid var(--border); border-radius: 16px;
-    }
-    .header h1 {
-      font-size: 1.8em;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      margin-bottom: 8px;
-    }
-    .header p { color: var(--text2); font-size: 0.9em; }
-    .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 24px; margin-bottom: 16px;
-    }
-    .card h3 { font-size: 1.1em; margin-bottom: 16px; color: var(--accent); }
-    .dropzone {
-      border: 2px dashed var(--border); border-radius: 12px;
-      padding: 40px 20px; text-align: center; cursor: pointer;
-      transition: all 0.3s; margin-bottom: 16px;
-    }
-    .dropzone:hover, .dropzone.dragover {
-      border-color: var(--accent); background: rgba(6,182,212,0.05);
-    }
-    .dropzone .icon { font-size: 3em; margin-bottom: 12px; }
-    .dropzone .label { font-size: 1.1em; font-weight: 600; }
-    .dropzone .hint { font-size: 0.85em; color: var(--text2); margin-top: 8px; }
-    .btn {
-      display: inline-block; padding: 12px 28px; border: none;
-      border-radius: 8px; font-size: 1em; font-weight: 600;
-      cursor: pointer; transition: all 0.3s;
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
-    }
-    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    .btn-outline { background: none; border: 1px solid var(--accent); color: var(--accent); }
-    .btn-outline:hover { background: rgba(6,182,212,0.1); }
-    .btn-success {
-      background: linear-gradient(135deg, var(--success), #059669); color: #fff;
-    }
-    .btn-success:hover { opacity: 0.9; transform: translateY(-1px); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Splitter — MDSC Tools</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 
-    /* スライダー設定エリア */
-    .size-control {
-      background: rgba(6,182,212,0.05); border: 1px solid var(--border);
-      border-radius: 10px; padding: 16px; margin-bottom: 16px;
-    }
-    .size-row {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
-    }
-    .size-row label { font-size: 0.9em; color: var(--text2); min-width: 120px; }
-    input[type=range] {
-      flex: 1; accent-color: var(--accent); cursor: pointer;
-    }
-    .size-badge {
-      min-width: 64px; text-align: right;
-      font-size: 1.1em; font-weight: 700; color: var(--accent);
-    }
-    .size-note { font-size: 0.8em; color: var(--text2); margin-top: 4px; }
+  :root {
+    --bg      : #0d0f14;
+    --surface : #13161e;
+    --border  : #1e2330;
+    --accent  : #00e5ff;
+    --accent2 : #7c3aed;
+    --accent3 : #ff6b35;
+    --text    : #c8d0e0;
+    --text-dim: #5a6480;
+    --success : #00c97a;
+    --error   : #ff4d6d;
+    --warn    : #ffb547;
+    --gas-url : 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
+  }
 
-    .file-info {
-      display: none; padding: 10px 16px; background: rgba(16,185,129,0.1);
-      border: 1px solid var(--success); border-radius: 8px;
-      margin-bottom: 16px; font-size: 0.9em; color: var(--success);
-    }
-    .error-msg {
-      display: none; background: rgba(239,68,68,0.1); border: 1px solid var(--danger);
-      border-radius: 8px; padding: 12px; color: var(--danger); margin: 12px 0;
-    }
-    .progress-wrap { display: none; margin: 16px 0; }
-    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
-    .progress-fill {
-      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
-      width: 0%; transition: width 0.4s;
-    }
-    .progress-text { font-size: 0.85em; color: var(--text2); margin-top: 6px; text-align: center; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    .result-area { display: none; }
-    .chunk-list { list-style: none; padding: 0; }
-    .chunk-item {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 14px; background: rgba(6,182,212,0.04);
-      border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
-    }
-    .chunk-item .chunk-name { flex: 1; font-size: 0.9em; font-family: monospace; color: var(--text); }
-    .chunk-item .chunk-size { font-size: 0.85em; color: var(--text2); min-width: 60px; text-align: right; }
+  body {
+    background : var(--bg);
+    color      : var(--text);
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    min-height : 100vh;
+    display    : flex;
+    flex-direction: column;
+    align-items: center;
+    padding    : 40px 16px 80px;
+  }
 
-    /* MDSCバナー */
-    .mdsc-banner {
-      display: flex; align-items: center; gap: 14px;
-      padding: 16px 20px;
-      background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.08));
-      border: 1px solid rgba(6,182,212,0.3); border-radius: 12px;
-      margin-top: 20px; cursor: pointer; transition: all 0.3s;
-    }
-    .mdsc-banner:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .mdsc-banner .banner-icon { font-size: 2.2em; }
-    .mdsc-banner .banner-text h4 { color: var(--accent); margin-bottom: 4px; }
-    .mdsc-banner .banner-text p { font-size: 0.85em; color: var(--text2); }
-    .mdsc-banner .banner-arrow {
-      font-size: 1.4em; color: var(--accent); margin-left: auto;
-    }
+  body::before {
+    content : "";
+    position: fixed;
+    inset   : 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px);
+    pointer-events: none;
+    z-index: 0;
+  }
 
-    .footer {
-      text-align: center; margin-top: 40px; padding-top: 20px;
-      border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text2);
-    }
-    @media (max-width: 600px) {
-      body { padding: 10px; }
-      .header h1 { font-size: 1.4em; }
-      .dropzone { padding: 30px 15px; }
-      .size-row { flex-wrap: wrap; }
-    }
-  </style>
+  .wrap { position: relative; z-index: 1; width: 100%; max-width: 720px; }
+
+  /* ── ヘッダー ── */
+  header { text-align: center; margin-bottom: 32px; }
+  .logo-line { margin-bottom: 8px; }
+  .logo-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: #fff; font-size: 10px; font-weight: 900;
+    letter-spacing: 3px; padding: 4px 12px; border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  header h1 {
+    font-size: 2.4em; font-weight: 900; letter-spacing: -1px;
+    color: var(--text);
+  }
+  header h1 span { color: var(--accent); }
+  .tagline { color: var(--text-dim); font-size: 13px; margin-top: 6px; letter-spacing: 1px; }
+
+  /* ── タブ ── */
+  .tabs {
+    display: flex; gap: 2px; margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+  .tab-btn {
+    background: none; border: none; color: var(--text-dim);
+    padding: 12px 24px; font-size: 14px; font-weight: 700;
+    cursor: pointer; border-bottom: 3px solid transparent;
+    margin-bottom: -2px; transition: all 0.2s;
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+    letter-spacing: 1px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── カード ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 16px;
+  }
+
+  /* ── ドロップゾーン ── */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .dropzone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.04);
+  }
+  .drop-icon { font-size: 2.4em; margin-bottom: 10px; display: block; }
+  .drop-main { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .drop-sub  { font-size: 12px; color: var(--text-dim); }
+
+  .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: rgba(0,229,255,0.04);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .file-item-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .file-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+    background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid rgba(0,229,255,0.3);
+  }
+  .file-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-size { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; margin-left: 8px; }
+  .file-remove {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 14px; padding: 2px 6px; flex-shrink: 0;
+  }
+  .file-remove:hover { color: var(--error); }
+
+  /* ── 設定 ── */
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--border); gap: 16px;
+  }
+  .setting-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .setting-label { font-size: 14px; }
+  .setting-label small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 3px; }
+  select, input[type="number"] {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; font-family: 'JetBrains Mono', monospace;
+    outline: none; transition: border-color 0.2s;
+  }
+  select:focus, input[type="number"]:focus { border-color: var(--accent); }
+  input[type="number"] { width: 80px; text-align: center; }
+
+  /* ── ボタン ── */
+  .btn {
+    display: block; width: 100%; padding: 14px;
+    border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 700; font-family: 'Zen Kaku Gothic New', sans-serif;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-dl-all {
+    display: block; width: 100%; margin-top: 16px; padding: 13px;
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.3);
+    color: var(--accent); border-radius: 8px;
+    font-size: 14px; font-weight: 700; font-family: 'Zen Kaku Gothic New', sans-serif;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
+  }
+  .btn-dl-all:hover { background: rgba(0,229,255,0.15); }
+
+  /* ── プログレス ── */
+  .progress-wrap { display: none; margin-bottom: 14px; }
+  .progress-bar  { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.4s; }
+  .progress-label{ font-size: 12px; color: var(--text-dim); margin-top: 6px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── 結果 ── */
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
+  }
+  .summary-box {
+    background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.15);
+    border-radius: 8px; padding: 14px; text-align: center;
+  }
+  .summary-val { font-size: 1.8em; font-weight: 900; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+  .summary-lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; }
+
+  .month-group  { margin-bottom: 14px; }
+  .month-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: rgba(124,58,237,0.1);
+    border: 1px solid rgba(124,58,237,0.25); border-radius: 8px 8px 0 0;
+  }
+  .month-title  { font-weight: 700; color: var(--accent); font-size: 14px; }
+  .month-meta   { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .month-dl {
+    background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.4);
+    color: var(--accent2); padding: 6px 14px; border-radius: 6px;
+    font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+  }
+  .month-dl:hover { background: rgba(124,58,237,0.35); }
+  .split-list { border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
+  .split-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-bottom: 1px solid var(--border); transition: background 0.15s;
+  }
+  .split-item:last-child { border-bottom: none; }
+  .split-item:hover { background: rgba(0,229,255,0.03); }
+  .split-name { flex: 1; font-size: 13px; font-family: 'JetBrains Mono', monospace; color: var(--text); word-break: break-all; }
+  .split-info { font-size: 11px; color: var(--text-dim); white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
+  .split-dl {
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25);
+    color: var(--accent); padding: 5px 12px; border-radius: 6px;
+    font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    font-family: 'Zen Kaku Gothic New', sans-serif;
+  }
+  .split-dl:hover { background: rgba(0,229,255,0.18); }
+
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .alert-warn { background: rgba(255,181,71,0.1); border: 1px solid rgba(255,181,71,0.3); color: var(--warn); }
+  .alert-err  { background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3); color: var(--error); }
+
+  /* ── ツールタブ ── */
+  .tool-card {
+    display: flex; align-items: center; gap: 16px; padding: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 12px;
+    cursor: pointer; transition: all 0.25s;
+    text-decoration: none; color: inherit;
+  }
+  .tool-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,229,255,0.08);
+  }
+  .tool-card.gas-card:hover {
+    border-color: var(--accent2);
+    box-shadow: 0 8px 24px rgba(124,58,237,0.12);
+  }
+  .tool-icon { font-size: 2.4em; flex-shrink: 0; }
+  .tool-info { flex: 1; }
+  .tool-info h4 { font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--text); }
+  .tool-info p  { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .tool-arrow { font-size: 1.4em; color: var(--accent); flex-shrink: 0; }
+  .gas-card .tool-arrow { color: var(--accent2); }
+
+  .info-card { padding: 20px 24px; }
+  .info-card h3 { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: var(--accent2); text-transform: uppercase; margin-bottom: 14px; }
+  .info-card p  { font-size: 13px; color: var(--text-dim); line-height: 1.8; }
+  .info-card p + p { margin-top: 10px; }
+  .info-card strong { color: var(--text); }
+
+  /* ── フッター ── */
+  footer { margin-top: 48px; text-align: center; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,181,71,0.95); color: #000;
+    padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    z-index: 9999; opacity: 0; transition: opacity .3s;
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 600px) {
+    body { padding: 20px 12px 60px; }
+    header h1 { font-size: 1.8em; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .tab-btn { padding: 10px 14px; font-size: 12px; }
+  }
+</style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
-  <div class="header">
-    <h1>✂️ JSON Splitter</h1>
-    <p>ChatGPT & Claude 履歴分割ツール — MDSC連携版</p>
-  </div>
-
-  <!-- ファイル選択 -->
-  <div class="card">
-    <h3>📁 ファイル選択</h3>
-    <div class="dropzone" id="dropzone"
-         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
-         ondrop="handleDrop(event)"
-         onclick="document.getElementById('fileInput').click()">
-      <div class="icon">📤</div>
-      <div class="label">JSONファイルをドラッグ＆ドロップ</div>
-      <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude のエクスポートJSON対応</div>
+  <header>
+    <div class="logo-line">
+      <span class="logo-badge">MDSC TOOLS</span>
     </div>
-    <input type="file" id="fileInput" accept=".json" style="display:none"
-           onchange="handleFileSelect(event)">
-    <div class="file-info" id="fileInfo"></div>
+    <h1>JSON <span>Splitter</span></h1>
+    <p class="tagline">ChatGPT / Claude の会話JSONを月単位・サイズ別に分割</p>
+  </header>
+
+  <!-- タブ -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('split', this)">✂️ 分割ツール</button>
+    <button class="tab-btn" onclick="switchTab('tools', this)">🔗 ツール &amp; リンク</button>
   </div>
 
-  <!-- 分割サイズ設定 -->
-  <div class="card">
-    <h3>⚙️ 分割サイズ設定</h3>
-    <div class="size-control">
-      <div class="size-row">
-        <label>分割サイズ上限</label>
-        <input type="range" id="sizeSlider"
-               min="1" max="25" step="1" value="10"
-               oninput="updateSlider()">
-        <span class="size-badge" id="sizeBadge">10 MB</span>
-      </div>
-      <div class="size-note">
-        最小 1MB ／ 標準 <strong style="color:var(--accent)">10MB</strong> ／ 最大 <strong style="color:var(--warn)">25MB</strong>
-        （MDSC処理上限は 15MB — 15MB以下を推奨）
-      </div>
-    </div>
-    <div style="text-align:center;">
-      <button class="btn btn-primary" id="splitBtn" disabled onclick="startSplit()">
-        ✂️ 分割開始
-      </button>
-    </div>
-  </div>
+  <!-- ===== タブ1: 分割ツール ===== -->
+  <div id="tab-split" class="tab-content active">
 
-  <div class="progress-wrap" id="progressWrap">
-    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="progress-text" id="progressText">処理中...</div>
-  </div>
-
-  <div class="error-msg" id="errorMsg"></div>
-
-  <!-- 結果 -->
-  <div class="result-area" id="resultArea">
+    <!-- アップロード -->
     <div class="card">
-      <h3>📦 分割結果</h3>
-      <p id="splitSummary" style="color:var(--text2);margin-bottom:14px;font-size:0.9em;"></p>
-      <ul class="chunk-list" id="chunkList"></ul>
-      <div style="margin-top:14px;text-align:center;">
-        <button class="btn btn-success" onclick="downloadAll()">⬇️ 全ファイルをまとめてダウンロード</button>
+      <div class="card-title">📂 JSONファイルを読み込む</div>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".json" multiple>
+        <span class="drop-icon">🗂️</span>
+        <div class="drop-main">クリックまたはドラッグ＆ドロップ</div>
+        <div class="drop-sub">ChatGPT / Claude の conversations.json　複数可</div>
+      </div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <!-- 設定 -->
+    <div class="card">
+      <div class="card-title">⚙️ 分割設定</div>
+      <div class="setting-row">
+        <div class="setting-label">
+          最大ファイルサイズ
+          <small>月内でこのサイズを超えたらさらに分割</small>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="maxMB" value="50" min="10" max="500"> MB
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">
+          ChatGPT + Claude 混在時の出力
+          <small>複数フォーマットを同時に入力した場合</small>
+        </div>
+        <select id="mergeMode">
+          <option value="separate">フォーマット別に分けて出力</option>
+          <option value="merge">1つのJSONに統合して出力</option>
+        </select>
       </div>
     </div>
 
-    <!-- MDSCへの導線 -->
-    <div class="mdsc-banner" id="mdscBanner">
-      <div class="banner-icon">🔬</div>
-      <div class="banner-text">
-        <h4>分割完了！次は MDSC で圧縮しましょう</h4>
-        <p>分割したJSONをMDSCにドロップして意味密度圧縮 → 特願2026-026882</p>
+    <!-- 実行 -->
+    <div class="card">
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">処理中...</div>
       </div>
-      <div class="banner-arrow">→</div>
+      <button class="btn btn-primary" id="runBtn" disabled>✂️ 分割を実行する</button>
     </div>
-  </div>
 
-  <div class="footer">MDSC JSON Splitter v1.4 | 特願2026-026882 | © 2026 RYO</div>
-</div>
+    <!-- 結果 -->
+    <div class="card" id="resultCard" style="display:none;">
+      <div class="card-title">📦 分割結果</div>
+      <div id="resultContent"></div>
+    </div>
+
+    <!-- 分割完了後 → MDSCバナー -->
+    <div id="mdscBannerSplit" style="display:none;">
+      <div class="tool-card gas-card" onclick="openGAS()">
+        <div class="tool-icon">🔬</div>
+        <div class="tool-info">
+          <h4>分割完了！次は MDSC で圧縮する</h4>
+          <p>分割したJSONをMDSCにドロップして意味密度圧縮 — 特願2026-026882</p>
+        </div>
+        <div class="tool-arrow">→</div>
+      </div>
+    </div>
+
+  </div><!-- /tab-split -->
+
+  <!-- ===== タブ2: ツール & リンク ===== -->
+  <div id="tab-tools" class="tab-content">
+
+    <div class="card">
+      <div class="card-title">🔗 外部ツール</div>
+
+      <!-- GAS MDSC -->
+      <div class="tool-card gas-card" onclick="openGAS()">
+        <div class="tool-icon">🔬</div>
+        <div class="tool-info">
+          <h4>MDSC — 意味密度圧縮ツール</h4>
+          <p>ChatGPT / Claude の履歴JSONを意味密度で圧縮。最大15MB対応。<br>特願2026-026882 / Engine v1.5</p>
+        </div>
+        <div class="tool-arrow" style="color:var(--accent2);">→</div>
+      </div>
+
+    </div>
+
+    <div class="card info-card">
+      <h3>ℹ️ JSON Splitter について</h3>
+      <p>MDSC の前処理ツールです。ChatGPT・Claude からエクスポートした大きなJSONを、月単位・サイズ別に自動分割します。</p>
+      <p>
+        <strong>複数ファイル同時処理対応</strong> — ChatGPT と Claude のJSONを同時に読み込めます。<br>
+        <strong>月別ZIPダウンロード</strong> — 月ごとにフォルダ分けしてZIP出力。<br>
+        <strong>レポートtxt同梱</strong> — 会話タイトル・日付の一覧を自動生成。
+      </p>
+      <p style="margin-top:14px;">
+        <strong>特許出願番号:</strong> 特願2026-026882<br>
+        <strong>Engine:</strong> MDSC v1.5
+      </p>
+    </div>
+
+  </div><!-- /tab-tools -->
+
+</div><!-- /wrap -->
+
+<footer><p>MDSC JSON Splitter v1.4 | 特願2026-026882 | © 2026 RYO</p></footer>
+<div class="toast" id="toast"></div>
 
 <script>
 // ================================================================
-// ★★★ URL設定 — ここだけ書き換えればOK ★★★
+// ★ GAS WebApp URL — ここだけ書き換え
 // ================================================================
-const CONFIG = {
-  // MDSC GAS WebApp の URL
-  // 例: 'https://script.google.com/macros/s/AKfycb.../exec'
-  MDSC_GAS_URL: 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec',
-};
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
 // ================================================================
 
-// 起動時にバナーリンクを設定
-document.addEventListener('DOMContentLoaded', function () {
-  const banner = document.getElementById('mdscBanner');
-  if (banner) {
-    banner.onclick = () => window.open(CONFIG.MDSC_GAS_URL, '_blank');
+function openGAS() { window.open(GAS_URL, '_blank'); }
+
+// ── タブ切替 ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ================================================================
+// JSON Splitter v1.4 (ベース: v1.3.2)
+// ================================================================
+
+function utf8ByteSize(str) {
+  var s = 0;
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    if (c < 0x80) s += 1;
+    else if (c < 0x800) s += 2;
+    else if (c < 0xD800 || c >= 0xE000) s += 3;
+    else { i++; s += 4; }
   }
+  return s;
+}
+
+var fileMap = {};
+var fileSeq = 0;
+var splitResult = [];
+var skipLog = [];
+
+// ── ファイル追加 ──
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  addFiles(e.target.files);
+  e.target.value = "";
 });
 
-// ---- スライダー ----
-function updateSlider() {
-  const v = document.getElementById('sizeSlider').value;
-  const badge = document.getElementById('sizeBadge');
-  badge.textContent = v + ' MB';
-  // 15MB超は警告色
-  badge.style.color = v > 15 ? 'var(--warn)' : 'var(--accent)';
-}
+var dz = document.getElementById("dropzone");
+dz.addEventListener("dragover", function(e) { e.preventDefault(); dz.classList.add("drag-over"); });
+dz.addEventListener("dragleave", function(e) { if (!dz.contains(e.relatedTarget)) dz.classList.remove("drag-over"); });
+dz.addEventListener("drop", function(e) {
+  e.preventDefault(); dz.classList.remove("drag-over");
+  addFiles(e.dataTransfer.files);
+});
 
-// ---- ファイル選択 ----
-let selectedFile = null;
-let chunks       = [];
-
-function handleDragOver(e) {
-  e.preventDefault();
-  e.currentTarget.classList.add('dragover');
-}
-
-function handleDragLeave(e) {
-  e.currentTarget.classList.remove('dragover');
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-  if (e.dataTransfer.files.length) {
-    loadFile(e.dataTransfer.files[0]);
+function addFiles(list) {
+  var duplicates = [];
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (!f.name.toLowerCase().endsWith(".json")) {
+      alert(f.name + " はJSONファイルではありません。スキップします。"); continue;
+    }
+    var dedupKey = f.name + "_" + f.size;
+    if (fileMap[dedupKey]) { duplicates.push(f.name); continue; }
+    fileMap[dedupKey] = f;
   }
+  if (duplicates.length) showToast("⚠️ 既に追加済みのファイルをスキップしました: " + duplicates.join("、"));
+  renderFileList();
 }
 
-function handleFileSelect(e) {
-  if (e.target.files.length) {
-    loadFile(e.target.files[0]);
-  }
-  // 同じファイルを再度選択しても change が発火するようにする
-  e.target.value = '';
-}
+function removeFile(id) { delete fileMap[id]; renderFileList(); }
 
-function loadFile(file) {
-  if (!file.name.endsWith('.json')) {
-    showError('JSONファイルを選択してください');
+function renderFileList() {
+  var list = document.getElementById("fileList");
+  var ids  = Object.keys(fileMap);
+  if (!ids.length) {
+    list.innerHTML = "";
+    document.getElementById("runBtn").disabled = true;
     return;
   }
-  selectedFile = file;
-  const mb = (file.size / 1024 / 1024).toFixed(2);
-  document.getElementById('fileInfo').style.display = 'block';
-  document.getElementById('fileInfo').textContent = `✅ ${file.name}（${mb} MB）`;
-  document.getElementById('splitBtn').disabled = false;
-  document.getElementById('resultArea').style.display = 'none';
-  document.getElementById('errorMsg').style.display = 'none';
+  var html = "";
+  ids.forEach(function(id) {
+    var f  = fileMap[id];
+    var mb = (f.size / 1024 / 1024).toFixed(2);
+    html += '<div class="file-item">'
+      + '<div class="file-item-info">'
+      + '<span class="file-badge">JSON</span>'
+      + '<span class="file-name">' + escHtml(f.name) + '</span>'
+      + '</div>'
+      + '<span class="file-size">' + mb + ' MB</span>'
+      + '<button class="file-remove" onclick="removeFile(\'' + id + '\')">✕</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+  document.getElementById("runBtn").disabled = false;
 }
 
-// ---- 分割処理 ----
-function startSplit() {
-  if (!selectedFile) return;
-  const maxMB  = parseInt(document.getElementById('sizeSlider').value, 10);
-  const maxBytes = maxMB * 1024 * 1024;
+// ── 実行 ──
+document.getElementById("runBtn").addEventListener("click", function() {
+  var ids = Object.keys(fileMap);
+  if (!ids.length) return;
+  document.getElementById("runBtn").disabled = true;
+  document.getElementById("resultCard").style.display = "none";
+  document.getElementById("mdscBannerSplit").style.display = "none";
+  splitResult = [];
+  skipLog = [];
+  readAllFiles(ids, 0, []);
+});
 
-  const btn = document.getElementById('splitBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ 処理中...';
-  showProgress(true, 10, 'ファイル読み込み中...');
-  hideError();
-  chunks = [];
+function readAllFiles(ids, index, allConvs) {
+  if (index >= ids.length) {
+    setProgress(true, "分割処理中...", 60);
+    setTimeout(function() { doSplit(allConvs); }, 50);
+    return;
+  }
+  var pct = Math.round((index / ids.length) * 50) + 5;
+  setProgress(true, "読み込み中 " + (index+1) + "/" + ids.length, pct);
 
-  const reader = new FileReader();
+  var f = fileMap[ids[index]];
+  var reader = new FileReader();
   reader.onload = function(e) {
-    showProgress(true, 30, 'JSON解析中...');
-    let data;
     try {
-      data = JSON.parse(e.target.result);
-    } catch (err) {
-      showError('JSONの解析に失敗しました: ' + err.message);
-      resetBtn();
-      return;
-    }
+      var raw = e.target.result;
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
 
-    if (!Array.isArray(data)) {
-      // 配列でない場合はそのまま1ファイルとして扱う
-      data = [data];
-    }
-
-    showProgress(true, 50, '分割処理中...');
-
-    // 会話ごとにサイズを積算して分割
-    const baseName = selectedFile.name.replace(/\.json$/i, '');
-    let current     = [];
-    let currentSize = 0;
-    let chunkIndex  = 1;
-
-    for (let i = 0; i < data.length; i++) {
-      const itemStr  = JSON.stringify(data[i]);
-      const itemSize = new TextEncoder().encode(itemStr).length;
-
-      if (current.length > 0 && currentSize + itemSize > maxBytes) {
-        // 現在のchunkを確定
-        chunks.push({
-          name: `${baseName}_part${String(chunkIndex).padStart(2, '0')}.json`,
-          data: current,
-          size: currentSize,
-        });
-        current = [];
-        currentSize = 0;
-        chunkIndex++;
+      var skipReason = shouldSkipFile(f.name);
+      if (skipReason) {
+        skipLog.push({ filename: f.name, reason: skipReason });
+        readAllFiles(ids, index + 1, allConvs);
+        return;
       }
 
-      current.push(data[i]);
-      currentSize += itemSize + 2; // カンマ+改行の余裕
+      var data = JSON.parse(raw);
+      var list = Array.isArray(data) ? data : [data];
+      var fmt  = detectFormat(list);
+
+      if (fmt === "skip") {
+        skipLog.push({ filename: f.name, reason: "対話データなし（フォーマット判定によりスキップ）" });
+        readAllFiles(ids, index + 1, allConvs);
+        return;
+      }
+
+      list.forEach(function(conv) { allConvs.push({ conv: conv, fmt: fmt }); });
+    } catch(err) {
+      skipLog.push({ filename: f.name, reason: "JSONパースエラー: " + err.message });
     }
-
-    // 最後の余り
-    if (current.length > 0) {
-      chunks.push({
-        name: `${baseName}_part${String(chunkIndex).padStart(2, '0')}.json`,
-        data: current,
-        size: currentSize,
-      });
-    }
-
-    showProgress(true, 90, '結果を表示中...');
-    displayResult(maxMB);
-    setTimeout(() => showProgress(false), 800);
-    resetBtn();
+    readAllFiles(ids, index + 1, allConvs);
   };
-
-  reader.onerror = () => {
-    showError('ファイルの読み込みに失敗しました');
-    resetBtn();
+  reader.onerror = function() {
+    alert(f.name + " の読み込みに失敗しました。");
+    readAllFiles(ids, index + 1, allConvs);
   };
-
-  reader.readAsText(selectedFile);
+  reader.readAsText(f, "utf-8");
 }
 
-function displayResult(maxMB) {
-  const summary = document.getElementById('splitSummary');
-  summary.innerHTML =
-    `<strong style="color:var(--accent)">${chunks.length}ファイル</strong> に分割しました ` +
-    `（各 ${maxMB}MB 以内）`;
+// ── スキップ判定 ──
+var SKIP_EXACT   = ["user.json","users.json","shared_conversations.json","sora.json","memories.json"];
+var SKIP_PREFIX  = ["file_0000"];
+function shouldSkipFile(filename) {
+  var fn = filename.toLowerCase();
+  if (SKIP_EXACT.indexOf(fn) !== -1) return "対話データなし（メタ情報のみ）";
+  for (var i = 0; i < SKIP_PREFIX.length; i++) {
+    if (fn.startsWith(SKIP_PREFIX[i])) return "システムファイル";
+  }
+  return null;
+}
 
-  const list = document.getElementById('chunkList');
-  list.innerHTML = '';
+// ── フォーマット判定 ──
+function detectFormat(list) {
+  if (!list || !list.length) return "skip";
+  var first = list[0];
+  if (!first || typeof first !== "object") return "skip";
+  if ("mapping" in first || "gizmo_id" in first) return "chatgpt";
+  if ("chat_messages" in first) return "claude";
+  if ("docs" in first && "prompt_template" in first) return "skip";
+  if ("conversations_memory" in first) return "skip";
+  if (Array.isArray(first.messages) && first.messages.length > 0) return "generic_chat";
+  if (Array.isArray(first.chat_messages) && first.chat_messages.length > 0) return "generic_chat";
+  return "skip";
+}
 
-  chunks.forEach((chunk, i) => {
-    const sizeMB = (chunk.size / 1024 / 1024).toFixed(2);
-    const warn = chunk.size / 1024 / 1024 > 15;
-    const li = document.createElement('li');
-    li.className = 'chunk-item';
-    li.innerHTML = `
-      <span class="chunk-name">📄 ${chunk.name}</span>
-      <span class="chunk-size" style="color:${warn ? 'var(--warn)' : 'var(--text2)'}">
-        ${sizeMB} MB
-      </span>
-      <button class="btn btn-outline" style="padding:6px 14px;font-size:0.82em;"
-              onclick="downloadChunk(${i})">⬇️ DL</button>`;
-    list.appendChild(li);
+// ── タイトル・日付取得 ──
+function getTitle(conv, fmt) {
+  if (fmt === "chatgpt") return (conv.title || conv.name || "（タイトルなし）").replace(/\n/g, " ").trim().slice(0, 60);
+  if (fmt === "claude") {
+    var t = (conv.name || "").trim();
+    if (!t && conv.chat_messages) {
+      for (var i = 0; i < conv.chat_messages.length; i++) {
+        var m = conv.chat_messages[i];
+        if (m.sender === "human") { t = (m.text || "").trim().slice(0, 60); break; }
+      }
+    }
+    return t || "（タイトルなし）";
+  }
+  return (conv.title || conv.name || "（汎用会話）").toString().slice(0, 60);
+}
+function getDate(conv, fmt) {
+  try {
+    if (fmt === "chatgpt") { var ts = conv.create_time; return ts ? new Date(ts * 1000) : null; }
+    if (fmt === "claude")  { var s = conv.created_at || ""; return s ? new Date(s) : null; }
+  } catch(e) {}
+  return null;
+}
+function toMonthKey(date) {
+  if (!date || isNaN(date.getTime())) return "0000-00";
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+}
+
+// ── 分割メイン ──
+function doSplit(allConvs) {
+  var maxBytes  = (parseInt(document.getElementById("maxMB").value) || 50) * 1024 * 1024;
+  var mergeMode = document.getElementById("mergeMode").value;
+  var groups = {};
+  allConvs.forEach(function(item) {
+    var key = mergeMode === "merge" ? "merged" : (item.fmt || "unknown");
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
   });
 
-  document.getElementById('resultArea').style.display = 'block';
+  splitResult = [];
+
+  Object.keys(groups).forEach(function(fmtKey) {
+    var items = groups[fmtKey];
+    var byMonth = {};
+    items.forEach(function(item) {
+      var mk = toMonthKey(getDate(item.conv, item.fmt));
+      if (!byMonth[mk]) byMonth[mk] = [];
+      byMonth[mk].push(item);
+    });
+
+    Object.keys(byMonth).sort().forEach(function(monthKey) {
+      var convs = byMonth[monthKey];
+      var parts = [];
+      var current = [], currentSize = 0, oversizeCount = 0;
+
+      convs.forEach(function(item) {
+        var singleArr = JSON.stringify([item.conv], null, 2);
+        var s = utf8ByteSize(singleArr);
+        if (s > maxBytes) oversizeCount++;
+        var addSize = current.length === 0 ? s : s - 2;
+        if (currentSize + addSize > maxBytes && current.length > 0) {
+          parts.push(current); current = []; currentSize = 0; addSize = s;
+        }
+        current.push(item.conv); currentSize += addSize;
+      });
+      if (current.length > 0) parts.push(current);
+
+      parts.forEach(function(partConvs, pi) {
+        var partNo   = parts.length > 1 ? (pi + 1) : 0;
+        var srcLabel = fmtKey === "merged" ? "combined" : fmtKey === "chatgpt" ? "chatgpt" : fmtKey === "claude" ? "claude" : "unknown";
+        var fname    = monthKey + "_" + srcLabel + (partNo ? "_part" + partNo : "") + "_conversations.json";
+        var sizeMB   = (utf8ByteSize(JSON.stringify(partConvs, null, 2)) / 1024 / 1024).toFixed(2);
+        var convTitles = partConvs.map(function(c) {
+          var fmt2 = srcLabel === "chatgpt" ? "chatgpt" : srcLabel === "claude" ? "claude" : "generic_chat";
+          var d = getDate(c, fmt2);
+          return { title: getTitle(c, fmt2), date: d ? d.toISOString().slice(0,10) : "不明", id: c.id || c.uuid || "" };
+        });
+        splitResult.push({
+          monthKey: monthKey, source: srcLabel, partNo: partNo,
+          convCount: partConvs.length, sizeMB: sizeMB, filename: fname,
+          data: partConvs, titles: convTitles,
+          oversizeWarn: oversizeCount > 0,
+          mdscSafe: parseFloat(sizeMB) <= 15
+        });
+      });
+    });
+  });
+
+  setProgress(false, "", 0);
+  document.getElementById("runBtn").disabled = false;
+  renderResult();
 }
 
-function downloadChunk(idx) {
-  const chunk = chunks[idx];
-  const blob = new Blob(
-    [JSON.stringify(chunk.data, null, 2)],
-    { type: 'application/json;charset=utf-8' }
-  );
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = chunk.name;
-  a.click();
-  URL.revokeObjectURL(url);
+// ── 結果表示 ──
+function renderResult() {
+  var card = document.getElementById("resultCard");
+  var cont = document.getElementById("resultContent");
+  card.style.display = "block";
+
+  if (!splitResult.length) {
+    cont.innerHTML = '<div class="alert alert-err">❌ 分割できるデータがありませんでした。</div>';
+    card.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
+  var totalFiles = splitResult.length;
+  var totalConvs = splitResult.reduce(function(a,x){ return a + x.convCount; }, 0);
+  var months     = [...new Set(splitResult.map(function(x){ return x.monthKey; }))].length;
+
+  var html = '<div class="summary-grid">'
+    + summaryBox(totalFiles, "生成ファイル数")
+    + summaryBox(totalConvs.toLocaleString(), "総会話数")
+    + summaryBox(months, "月数")
+    + '</div>';
+
+  if (skipLog.length > 0) {
+    html += '<div class="alert alert-warn">⏭️ スキップ: ' + skipLog.map(function(s){ return escHtml(s.filename); }).join("、") + '</div>';
+  }
+
+  var byMonth = {};
+  splitResult.forEach(function(item, idx) {
+    if (!byMonth[item.monthKey]) byMonth[item.monthKey] = [];
+    byMonth[item.monthKey].push({ item: item, idx: idx });
+  });
+
+  Object.keys(byMonth).sort().forEach(function(mk) {
+    var entries = byMonth[mk];
+    var totalMB = entries.reduce(function(a,e){ return a + parseFloat(e.item.sizeMB); }, 0).toFixed(2);
+    var totalC  = entries.reduce(function(a,e){ return a + e.item.convCount; }, 0);
+
+    html += '<div class="month-group">'
+      + '<div class="month-header">'
+      + '<div><div class="month-title">📅 ' + mk + '</div>'
+      + '<div class="month-meta">' + entries.length + ' ファイル　' + totalC + ' 件　' + totalMB + ' MB</div></div>'
+      + '<button class="month-dl" onclick="downloadMonth(\'' + mk + '\')">📦 ZIP</button>'
+      + '</div><div class="split-list">';
+
+    entries.forEach(function(e) {
+      var warn = "";
+      if (!e.item.mdscSafe) warn += ' <span style="color:var(--warn);font-size:10px;">⚠️ MDSC 15MB超</span>';
+      if (e.item.oversizeWarn) warn += ' <span style="color:var(--warn);font-size:10px;">⚠️ 1件超過あり</span>';
+      html += '<div class="split-item">'
+        + '<span class="split-name">' + escHtml(e.item.filename) + warn + '</span>'
+        + '<span class="split-info">' + e.item.convCount + '件 / ' + e.item.sizeMB + 'MB</span>'
+        + '<button class="split-dl" onclick="downloadOne(' + e.idx + ')">⬇ DL</button>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  html += '<button class="btn-dl-all" onclick="downloadAll()">📦 すべてまとめてZIPダウンロード</button>';
+  cont.innerHTML = html;
+
+  // 分割完了バナーを表示
+  document.getElementById("mdscBannerSplit").style.display = "block";
+  card.scrollIntoView({ behavior: "smooth" });
+}
+
+// ── ダウンロード ──
+function downloadOne(idx) {
+  var item = splitResult[idx];
+  if (!item) return;
+  triggerDownload(JSON.stringify(item.data, null, 2), item.filename);
+}
+
+function downloadMonth(monthKey) {
+  var items = splitResult.filter(function(x){ return x.monthKey === monthKey; });
+  if (items.length === 1) { downloadOne(splitResult.indexOf(items[0])); return; }
+  var zip = new JSZip();
+  var folder = zip.folder(monthKey);
+  items.forEach(function(item) { folder.file(item.filename, JSON.stringify(item.data, null, 2)); });
+  var lines = ["MDSC JSON Splitter v1.4 - 月別レポート: " + monthKey, "生成日時: " + new Date().toLocaleString("ja-JP"), "=================================================="];
+  items.forEach(function(item) {
+    lines.push("■ " + item.filename + " (" + item.convCount + "件 / " + item.sizeMB + "MB)");
+    item.titles.forEach(function(t, i) { lines.push("  " + String(i+1).padStart(3," ") + ". [" + t.date + "] " + t.title); });
+    lines.push("");
+  });
+  zip.file(monthKey + "_report.txt", lines.join("\n"));
+  zip.generateAsync({ type: "blob" }).then(function(blob) { triggerDownloadBlob(blob, monthKey + "_conversations.zip"); });
 }
 
 function downloadAll() {
-  // 少し間隔を空けて全ファイルをDL
-  chunks.forEach((_, i) => setTimeout(() => downloadChunk(i), i * 300));
+  var zip = new JSZip();
+  var inputFiles = Object.keys(fileMap).map(function(k) { return fileMap[k].name; });
+  var byMonth = {};
+  splitResult.forEach(function(item) {
+    if (!byMonth[item.monthKey]) byMonth[item.monthKey] = [];
+    byMonth[item.monthKey].push(item);
+  });
+  Object.keys(byMonth).forEach(function(mk) {
+    var folder = zip.folder(mk);
+    byMonth[mk].forEach(function(item) { folder.file(item.filename, JSON.stringify(item.data, null, 2)); });
+  });
+  zip.file("MDSC_split_report.txt", buildReportTxt(inputFiles));
+  zip.generateAsync({ type: "blob" }).then(function(blob) { triggerDownloadBlob(blob, "MDSC_split_all.zip"); });
 }
 
-// ---- UI helpers ----
-function showProgress(show, pct, text) {
-  document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
-  if (pct !== undefined) {
-    document.getElementById('progressFill').style.width = pct + '%';
-  }
-  if (text !== undefined) {
-    document.getElementById('progressText').textContent = text;
-  }
+function buildReportTxt(inputFiles) {
+  var lines = ["================================================================","MDSC JSON Splitter v1.4 - 分割レポート","================================================================","生成日時  : " + new Date().toLocaleString("ja-JP"),"最大サイズ: " + (document.getElementById("maxMB").value||"50") + " MB","","【入力ファイル】"];
+  inputFiles.forEach(function(fn) { lines.push("  - " + fn); });
+  lines.push("");
+  if (skipLog.length > 0) { lines.push("【スキップしたファイル】"); skipLog.forEach(function(s){ lines.push("  - " + s.filename + "  ← " + s.reason); }); lines.push(""); }
+  lines.push("【分割結果】","  生成ファイル数: " + splitResult.length,"  総会話数      : " + splitResult.reduce(function(a,x){ return a+x.convCount; },0),"");
+  var byMonth = {};
+  splitResult.forEach(function(item) { if (!byMonth[item.monthKey]) byMonth[item.monthKey]=[]; byMonth[item.monthKey].push(item); });
+  Object.keys(byMonth).sort().forEach(function(mk) {
+    lines.push("----------------------------------------------------------------","■ " + mk);
+    byMonth[mk].forEach(function(item) {
+      lines.push("  ファイル: " + item.filename,"  件数    : " + item.convCount + " 件 / 計算サイズ: " + item.sizeMB + " MB");
+      if (item.oversizeWarn) lines.push("  ⚠️  1件超過あり");
+      if (!item.mdscSafe)    lines.push("  ⚠️  MDSC 15MB超");
+      lines.push("  会話一覧:");
+      item.titles.forEach(function(t, i) { lines.push("    " + String(i+1).padStart(3," ") + ". [" + t.date + "] " + t.title + (t.id ? "  (ID: " + t.id.slice(0,8) + "...)" : "")); });
+      lines.push("");
+    });
+  });
+  lines.push("================================================================","Generated by MDSC JSON Splitter v1.4","================================================================");
+  return lines.join("\n");
 }
 
-function showError(msg) {
-  const el = document.getElementById('errorMsg');
-  el.textContent = '❌ ' + msg;
-  el.style.display = 'block';
+function triggerDownload(text, filename) {
+  triggerDownloadBlob(new Blob([text], { type: "application/json;charset=utf-8" }), filename);
+}
+function triggerDownloadBlob(blob, filename) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
-function hideError() {
-  document.getElementById('errorMsg').style.display = 'none';
+// ── ユーティリティ ──
+function setProgress(show, label, pct) {
+  document.getElementById("progressWrap").style.display = show ? "block" : "none";
+  document.getElementById("progressFill").style.width   = pct + "%";
+  document.getElementById("progressLabel").textContent  = label;
 }
-
-function resetBtn() {
-  const btn = document.getElementById('splitBtn');
-  btn.disabled = false;
-  btn.textContent = '✂️ 分割開始';
+function summaryBox(val, lbl) {
+  return '<div class="summary-box"><div class="summary-val">'+val+'</div><div class="summary-lbl">'+lbl+'</div></div>';
+}
+function showToast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(function() { t.classList.remove("show"); }, 3000);
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 </script>
 </body>
