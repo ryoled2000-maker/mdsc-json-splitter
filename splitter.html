@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDSC JSON Splitter — 履歴分割ツール</title>
+  <meta name="description" content="ChatGPT・Claude のJSONエクスポートを指定サイズに分割するツール">
+  <style>
+    /* ============================================================
+       ★ URL設定は <script> 内の CONFIG を編集
+       ============================================================ */
+    :root {
+      --bg: #0a0e17; --surface: #111827; --border: #1f2937;
+      --accent: #06b6d4; --accent2: #8b5cf6;
+      --text: #e5e7eb; --text2: #9ca3af;
+      --success: #10b981; --warn: #f59e0b; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; padding: 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    .header {
+      text-align: center; margin-bottom: 30px; padding: 20px;
+      background: linear-gradient(135deg, rgba(6,182,212,0.1), rgba(139,92,246,0.1));
+      border: 1px solid var(--border); border-radius: 16px;
+    }
+    .header h1 {
+      font-size: 1.8em;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .header p { color: var(--text2); font-size: 0.9em; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .card h3 { font-size: 1.1em; margin-bottom: 16px; color: var(--accent); }
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: 12px;
+      padding: 40px 20px; text-align: center; cursor: pointer;
+      transition: all 0.3s; margin-bottom: 16px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent); background: rgba(6,182,212,0.05);
+    }
+    .dropzone .icon { font-size: 3em; margin-bottom: 12px; }
+    .dropzone .label { font-size: 1.1em; font-weight: 600; }
+    .dropzone .hint { font-size: 0.85em; color: var(--text2); margin-top: 8px; }
+    .btn {
+      display: inline-block; padding: 12px 28px; border: none;
+      border-radius: 8px; font-size: 1em; font-weight: 600;
+      cursor: pointer; transition: all 0.3s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-outline { background: none; border: 1px solid var(--accent); color: var(--accent); }
+    .btn-outline:hover { background: rgba(6,182,212,0.1); }
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #059669); color: #fff;
+    }
+    .btn-success:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* スライダー設定エリア */
+    .size-control {
+      background: rgba(6,182,212,0.05); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    }
+    .size-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    .size-row label { font-size: 0.9em; color: var(--text2); min-width: 120px; }
+    input[type=range] {
+      flex: 1; accent-color: var(--accent); cursor: pointer;
+    }
+    .size-badge {
+      min-width: 64px; text-align: right;
+      font-size: 1.1em; font-weight: 700; color: var(--accent);
+    }
+    .size-note { font-size: 0.8em; color: var(--text2); margin-top: 4px; }
+
+    .file-info {
+      display: none; padding: 10px 16px; background: rgba(16,185,129,0.1);
+      border: 1px solid var(--success); border-radius: 8px;
+      margin-bottom: 16px; font-size: 0.9em; color: var(--success);
+    }
+    .error-msg {
+      display: none; background: rgba(239,68,68,0.1); border: 1px solid var(--danger);
+      border-radius: 8px; padding: 12px; color: var(--danger); margin: 12px 0;
+    }
+    .progress-wrap { display: none; margin: 16px 0; }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+      width: 0%; transition: width 0.4s;
+    }
+    .progress-text { font-size: 0.85em; color: var(--text2); margin-top: 6px; text-align: center; }
+
+    .result-area { display: none; }
+    .chunk-list { list-style: none; padding: 0; }
+    .chunk-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; background: rgba(6,182,212,0.04);
+      border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+    }
+    .chunk-item .chunk-name { flex: 1; font-size: 0.9em; font-family: monospace; color: var(--text); }
+    .chunk-item .chunk-size { font-size: 0.85em; color: var(--text2); min-width: 60px; text-align: right; }
+
+    /* MDSCバナー */
+    .mdsc-banner {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 20px;
+      background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.08));
+      border: 1px solid rgba(6,182,212,0.3); border-radius: 12px;
+      margin-top: 20px; cursor: pointer; transition: all 0.3s;
+    }
+    .mdsc-banner:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .mdsc-banner .banner-icon { font-size: 2.2em; }
+    .mdsc-banner .banner-text h4 { color: var(--accent); margin-bottom: 4px; }
+    .mdsc-banner .banner-text p { font-size: 0.85em; color: var(--text2); }
+    .mdsc-banner .banner-arrow {
+      font-size: 1.4em; color: var(--accent); margin-left: auto;
+    }
+
+    .footer {
+      text-align: center; margin-top: 40px; padding-top: 20px;
+      border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text2);
+    }
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .header h1 { font-size: 1.4em; }
+      .dropzone { padding: 30px 15px; }
+      .size-row { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>✂️ JSON Splitter</h1>
+    <p>ChatGPT & Claude 履歴分割ツール — MDSC連携版</p>
+  </div>
+
+  <!-- ファイル選択 -->
+  <div class="card">
+    <h3>📁 ファイル選択</h3>
+    <div class="dropzone" id="dropzone"
+         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📤</div>
+      <div class="label">JSONファイルをドラッグ＆ドロップ</div>
+      <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude のエクスポートJSON対応</div>
+    </div>
+    <input type="file" id="fileInput" accept=".json" style="display:none"
+           onchange="handleFileSelect(event)">
+    <div class="file-info" id="fileInfo"></div>
+  </div>
+
+  <!-- 分割サイズ設定 -->
+  <div class="card">
+    <h3>⚙️ 分割サイズ設定</h3>
+    <div class="size-control">
+      <div class="size-row">
+        <label>分割サイズ上限</label>
+        <input type="range" id="sizeSlider"
+               min="1" max="25" step="1" value="10"
+               oninput="updateSlider()">
+        <span class="size-badge" id="sizeBadge">10 MB</span>
+      </div>
+      <div class="size-note">
+        最小 1MB ／ 標準 <strong style="color:var(--accent)">10MB</strong> ／ 最大 <strong style="color:var(--warn)">25MB</strong>
+        （MDSC処理上限は 15MB — 15MB以下を推奨）
+      </div>
+    </div>
+    <div style="text-align:center;">
+      <button class="btn btn-primary" id="splitBtn" disabled onclick="startSplit()">
+        ✂️ 分割開始
+      </button>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">処理中...</div>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <!-- 結果 -->
+  <div class="result-area" id="resultArea">
+    <div class="card">
+      <h3>📦 分割結果</h3>
+      <p id="splitSummary" style="color:var(--text2);margin-bottom:14px;font-size:0.9em;"></p>
+      <ul class="chunk-list" id="chunkList"></ul>
+      <div style="margin-top:14px;text-align:center;">
+        <button class="btn btn-success" onclick="downloadAll()">⬇️ 全ファイルをまとめてダウンロード</button>
+      </div>
+    </div>
+
+    <!-- MDSCへの導線 -->
+    <div class="mdsc-banner" id="mdscBanner">
+      <div class="banner-icon">🔬</div>
+      <div class="banner-text">
+        <h4>分割完了！次は MDSC で圧縮しましょう</h4>
+        <p>分割したJSONをMDSCにドロップして意味密度圧縮 → 特願2026-026882</p>
+      </div>
+      <div class="banner-arrow">→</div>
+    </div>
+  </div>
+
+  <div class="footer">MDSC JSON Splitter v1.4 | 特願2026-026882 | © 2026 RYO</div>
+</div>
+
+<script>
+// ================================================================
+// ★★★ URL設定 — ここだけ書き換えればOK ★★★
+// ================================================================
+const CONFIG = {
+  // MDSC GAS WebApp の URL
+  // 例: 'https://script.google.com/macros/s/AKfycb.../exec'
+  MDSC_GAS_URL: 'https://TODO_MDSC_GAS_URL_HERE/exec',
+};
+// ================================================================
+
+// 起動時にバナーリンクを設定
+document.getElementById('mdscBanner').onclick =
+  () => window.open(CONFIG.MDSC_GAS_URL, '_blank');
+
+// ---- スライダー ----
+function updateSlider() {
+  const v = document.getElementById('sizeSlider').value;
+  const badge = document.getElementById('sizeBadge');
+  badge.textContent = v + ' MB';
+  // 15MB超は警告色
+  badge.style.color = v > 15 ? 'var(--warn)' : 'var(--accent)';
+}
+
+// ---- ファイル選択 ----
+let selectedFile = null;
+let chunks       = [];
+
+function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
+function handleDrop(e) {
+  e.preventDefault(); e.currentTarget.classList.remove('dragover');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+}
+function handleFileSelect(e) { if (e.target.files.length) loadFile(e.target.files[0]); }
+
+function loadFile(file) {
+  if (!file.name.endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
+  selectedFile = file;
+  const mb = (file.size / 1024 / 1024).toFixed(2);
+  document.getElementById('fileInfo').style.display = 'block';
+  document.getElementById('fileInfo').textContent = `✅ ${file.name}（${mb} MB）`;
+  document.getElementById('splitBtn').disabled = false;
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
+// ---- 分割処理 ----
+function startSplit() {
+  if (!selectedFile) return;
+  const maxMB  = parseInt(document.getElementById('sizeSlider').value);
+  const maxBytes = maxMB * 1024 * 1024;
+
+  const btn = document.getElementById('splitBtn');
+  btn.disabled = true; btn.textContent = '⏳ 処理中...';
+  showProgress(true, 10, 'ファイル読み込み中...');
+  hideError();
+  chunks = [];
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    showProgress(true, 30, 'JSON解析中...');
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch(err) { showError('JSONの解析に失敗しました: ' + err.message); resetBtn(); return; }
+
+    if (!Array.isArray(data)) {
+      // 配列でない場合はそのまま1ファイルとして扱う
+      data = [data];
+    }
+
+    showProgress(true, 50, '分割処理中...');
+
+    // 会話ごとにサイズを積算して分割
+    const baseName = selectedFile.name.replace(/\.json$/i, '');
+    let current    = [];
+    let currentSize = 0;
+    let chunkIndex  = 1;
+
+    for (let i = 0; i < data.length; i++) {
+      const itemStr  = JSON.stringify(data[i]);
+      const itemSize = new TextEncoder().encode(itemStr).length;
+
+      if (current.length > 0 && currentSize + itemSize > maxBytes) {
+        // 現在のchunkを確定
+        chunks.push({
+          name: `${baseName}_part${String(chunkIndex).padStart(2,'0')}.json`,
+          data: current,
+          size: currentSize,
+        });
+        current    = [];
+        currentSize = 0;
+        chunkIndex++;
+      }
+      current.push(data[i]);
+      currentSize += itemSize + 2; // カンマ+改行の余裕
+    }
+
+    // 最後の余り
+    if (current.length > 0) {
+      chunks.push({
+        name: `${baseName}_part${String(chunkIndex).padStart(2,'0')}.json`,
+        data: current,
+        size: currentSize,
+      });
+    }
+
+    showProgress(true, 90, '結果を表示中...');
+    displayResult(maxMB);
+    setTimeout(() => showProgress(false), 800);
+    resetBtn();
+  };
+  reader.onerror = () => { showError('ファイルの読み込みに失敗しました'); resetBtn(); };
+  reader.readAsText(selectedFile);
+}
+
+function displayResult(maxMB) {
+  const summary = document.getElementById('splitSummary');
+  summary.innerHTML =
+    `<strong style="color:var(--accent)">${chunks.length}ファイル</strong> に分割しました ` +
+    `（各 ${maxMB}MB 以内）`;
+
+  const list = document.getElementById('chunkList');
+  list.innerHTML = '';
+
+  chunks.forEach((chunk, i) => {
+    const sizeMB = (chunk.size / 1024 / 1024).toFixed(2);
+    const warn   = chunk.size / 1024 / 1024 > 15;
+    const li = document.createElement('li');
+    li.className = 'chunk-item';
+    li.innerHTML = `
+      <span class="chunk-name">📄 ${chunk.name}</span>
+      <span class="chunk-size" style="color:${warn?'var(--warn)':'var(--text2)'}">
+        ${sizeMB} MB
+      </span>
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:0.82em;"
+              onclick="downloadChunk(${i})">⬇️ DL</button>`;
+    list.appendChild(li);
+  });
+
+  document.getElementById('resultArea').style.display = 'block';
+}
+
+function downloadChunk(idx) {
+  const chunk = chunks[idx];
+  const blob  = new Blob([JSON.stringify(chunk.data, null, 2)],
+                         { type: 'application/json;charset=utf-8' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url; a.download = chunk.name;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function downloadAll() {
+  // 少し間隔を空けて全ファイルをDL
+  chunks.forEach((_, i) => setTimeout(() => downloadChunk(i), i * 300));
+}
+
+// ---- UI helpers ----
+function showProgress(show, pct, text) {
+  document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
+  if (pct  !== undefined) document.getElementById('progressFill').style.width = pct + '%';
+  if (text !== undefined) document.getElementById('progressText').textContent = text;
+}
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = '❌ ' + msg; el.style.display = 'block';
+}
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+function resetBtn() {
+  const btn = document.getElementById('splitBtn');
+  btn.disabled = false; btn.textContent = '✂️ 分割開始';
+}
+</script>
+</body>
+</html>
