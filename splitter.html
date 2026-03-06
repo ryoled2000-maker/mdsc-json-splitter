@@ -226,13 +226,17 @@
 const CONFIG = {
   // MDSC GAS WebApp の URL
   // 例: 'https://script.google.com/macros/s/AKfycb.../exec'
-  MDSC_GAS_URL: 'https://TODO_MDSC_GAS_URL_HERE/exec',
+  MDSC_GAS_URL: 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec',
 };
 // ================================================================
 
 // 起動時にバナーリンクを設定
-document.getElementById('mdscBanner').onclick =
-  () => window.open(CONFIG.MDSC_GAS_URL, '_blank');
+document.addEventListener('DOMContentLoaded', function () {
+  const banner = document.getElementById('mdscBanner');
+  if (banner) {
+    banner.onclick = () => window.open(CONFIG.MDSC_GAS_URL, '_blank');
+  }
+});
 
 // ---- スライダー ----
 function updateSlider() {
@@ -247,16 +251,36 @@ function updateSlider() {
 let selectedFile = null;
 let chunks       = [];
 
-function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
-function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
-function handleDrop(e) {
-  e.preventDefault(); e.currentTarget.classList.remove('dragover');
-  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+function handleDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('dragover');
 }
-function handleFileSelect(e) { if (e.target.files.length) loadFile(e.target.files[0]); }
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('dragover');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  if (e.dataTransfer.files.length) {
+    loadFile(e.dataTransfer.files[0]);
+  }
+}
+
+function handleFileSelect(e) {
+  if (e.target.files.length) {
+    loadFile(e.target.files[0]);
+  }
+  // 同じファイルを再度選択しても change が発火するようにする
+  e.target.value = '';
+}
 
 function loadFile(file) {
-  if (!file.name.endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
+  if (!file.name.endsWith('.json')) {
+    showError('JSONファイルを選択してください');
+    return;
+  }
   selectedFile = file;
   const mb = (file.size / 1024 / 1024).toFixed(2);
   document.getElementById('fileInfo').style.display = 'block';
@@ -269,11 +293,12 @@ function loadFile(file) {
 // ---- 分割処理 ----
 function startSplit() {
   if (!selectedFile) return;
-  const maxMB  = parseInt(document.getElementById('sizeSlider').value);
+  const maxMB  = parseInt(document.getElementById('sizeSlider').value, 10);
   const maxBytes = maxMB * 1024 * 1024;
 
   const btn = document.getElementById('splitBtn');
-  btn.disabled = true; btn.textContent = '⏳ 処理中...';
+  btn.disabled = true;
+  btn.textContent = '⏳ 処理中...';
   showProgress(true, 10, 'ファイル読み込み中...');
   hideError();
   chunks = [];
@@ -282,8 +307,13 @@ function startSplit() {
   reader.onload = function(e) {
     showProgress(true, 30, 'JSON解析中...');
     let data;
-    try { data = JSON.parse(e.target.result); }
-    catch(err) { showError('JSONの解析に失敗しました: ' + err.message); resetBtn(); return; }
+    try {
+      data = JSON.parse(e.target.result);
+    } catch (err) {
+      showError('JSONの解析に失敗しました: ' + err.message);
+      resetBtn();
+      return;
+    }
 
     if (!Array.isArray(data)) {
       // 配列でない場合はそのまま1ファイルとして扱う
@@ -294,7 +324,7 @@ function startSplit() {
 
     // 会話ごとにサイズを積算して分割
     const baseName = selectedFile.name.replace(/\.json$/i, '');
-    let current    = [];
+    let current     = [];
     let currentSize = 0;
     let chunkIndex  = 1;
 
@@ -305,14 +335,15 @@ function startSplit() {
       if (current.length > 0 && currentSize + itemSize > maxBytes) {
         // 現在のchunkを確定
         chunks.push({
-          name: `${baseName}_part${String(chunkIndex).padStart(2,'0')}.json`,
+          name: `${baseName}_part${String(chunkIndex).padStart(2, '0')}.json`,
           data: current,
           size: currentSize,
         });
-        current    = [];
+        current = [];
         currentSize = 0;
         chunkIndex++;
       }
+
       current.push(data[i]);
       currentSize += itemSize + 2; // カンマ+改行の余裕
     }
@@ -320,7 +351,7 @@ function startSplit() {
     // 最後の余り
     if (current.length > 0) {
       chunks.push({
-        name: `${baseName}_part${String(chunkIndex).padStart(2,'0')}.json`,
+        name: `${baseName}_part${String(chunkIndex).padStart(2, '0')}.json`,
         data: current,
         size: currentSize,
       });
@@ -331,7 +362,12 @@ function startSplit() {
     setTimeout(() => showProgress(false), 800);
     resetBtn();
   };
-  reader.onerror = () => { showError('ファイルの読み込みに失敗しました'); resetBtn(); };
+
+  reader.onerror = () => {
+    showError('ファイルの読み込みに失敗しました');
+    resetBtn();
+  };
+
   reader.readAsText(selectedFile);
 }
 
@@ -346,12 +382,12 @@ function displayResult(maxMB) {
 
   chunks.forEach((chunk, i) => {
     const sizeMB = (chunk.size / 1024 / 1024).toFixed(2);
-    const warn   = chunk.size / 1024 / 1024 > 15;
+    const warn = chunk.size / 1024 / 1024 > 15;
     const li = document.createElement('li');
     li.className = 'chunk-item';
     li.innerHTML = `
       <span class="chunk-name">📄 ${chunk.name}</span>
-      <span class="chunk-size" style="color:${warn?'var(--warn)':'var(--text2)'}">
+      <span class="chunk-size" style="color:${warn ? 'var(--warn)' : 'var(--text2)'}">
         ${sizeMB} MB
       </span>
       <button class="btn btn-outline" style="padding:6px 14px;font-size:0.82em;"
@@ -364,12 +400,16 @@ function displayResult(maxMB) {
 
 function downloadChunk(idx) {
   const chunk = chunks[idx];
-  const blob  = new Blob([JSON.stringify(chunk.data, null, 2)],
-                         { type: 'application/json;charset=utf-8' });
-  const url   = URL.createObjectURL(blob);
-  const a     = document.createElement('a');
-  a.href = url; a.download = chunk.name;
-  a.click(); URL.revokeObjectURL(url);
+  const blob = new Blob(
+    [JSON.stringify(chunk.data, null, 2)],
+    { type: 'application/json;charset=utf-8' }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = chunk.name;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function downloadAll() {
@@ -380,17 +420,28 @@ function downloadAll() {
 // ---- UI helpers ----
 function showProgress(show, pct, text) {
   document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
-  if (pct  !== undefined) document.getElementById('progressFill').style.width = pct + '%';
-  if (text !== undefined) document.getElementById('progressText').textContent = text;
+  if (pct !== undefined) {
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+  if (text !== undefined) {
+    document.getElementById('progressText').textContent = text;
+  }
 }
+
 function showError(msg) {
   const el = document.getElementById('errorMsg');
-  el.textContent = '❌ ' + msg; el.style.display = 'block';
+  el.textContent = '❌ ' + msg;
+  el.style.display = 'block';
 }
-function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+
+function hideError() {
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
 function resetBtn() {
   const btn = document.getElementById('splitBtn');
-  btn.disabled = false; btn.textContent = '✂️ 分割開始';
+  btn.disabled = false;
+  btn.textContent = '✂️ 分割開始';
 }
 </script>
 </body>
