@@ -20,7 +20,6 @@
     --success : #00c97a;
     --error   : #ff4d6d;
     --warn    : #ffb547;
-    --gas-url : 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -146,6 +145,35 @@
   .setting-row:last-child { border-bottom: none; padding-bottom: 0; }
   .setting-label { font-size: 14px; }
   .setting-label small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 3px; }
+
+  /* ── スライダー設定 ── */
+  .size-control {
+    background: rgba(0,229,255,0.04); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 12px;
+  }
+  .size-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+  }
+  .size-label {
+    font-size: 13px; color: var(--text-dim); min-width: 110px; flex-shrink: 0;
+  }
+  input[type=range] {
+    flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px;
+  }
+  .size-badge {
+    min-width: 60px; text-align: right;
+    font-size: 1.1em; font-weight: 700; color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .size-note {
+    font-size: 12px; color: var(--text-dim); line-height: 1.6;
+  }
+  .size-info {
+    font-size: 12px; color: var(--success);
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
   select, input[type="number"] {
     background: var(--bg); color: var(--text);
     border: 1px solid var(--border); border-radius: 6px;
@@ -314,25 +342,20 @@
 
     <!-- 設定 -->
     <div class="card">
-      <div class="card-title">⚙️ 分割設定</div>
-      <div class="setting-row">
-        <div class="setting-label">
-          最大ファイルサイズ
-          <small>月内でこのサイズを超えたらさらに分割</small>
+      <div class="card-title">⚙️ 分割サイズ設定</div>
+      <div class="size-control">
+        <div class="size-row">
+          <label class="size-label">分割サイズ上限</label>
+          <input type="range" id="sizeSlider" min="1" max="20" step="1" value="10" oninput="updateSlider()">
+          <span class="size-badge" id="sizeBadge">10 MB</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="number" id="maxMB" value="50" min="10" max="500"> MB
+        <div class="size-note">
+          最小 <strong>1MB</strong> ／ 標準 <strong style="color:var(--accent)">10MB</strong> ／ 最大 <strong style="color:var(--warn)">20MB</strong>
+          &nbsp;—&nbsp; MDSC処理上限は 15MB（15MB以下を推奨）
         </div>
       </div>
-      <div class="setting-row">
-        <div class="setting-label">
-          ChatGPT + Claude 混在時の出力
-          <small>複数フォーマットを同時に入力した場合</small>
-        </div>
-        <select id="mergeMode">
-          <option value="separate">フォーマット別に分けて出力</option>
-          <option value="merge">1つのJSONに統合して出力</option>
-        </select>
+      <div class="size-info">
+        ✅ ChatGPT / Claude 混在OK — フォーマット別に自動判別して出力
       </div>
     </div>
 
@@ -410,6 +433,15 @@
 // ================================================================
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
 // ================================================================
+
+
+// ── スライダー ──
+function updateSlider() {
+  var v = parseInt(document.getElementById("sizeSlider").value);
+  var badge = document.getElementById("sizeBadge");
+  badge.textContent = v + " MB";
+  badge.style.color = v > 15 ? "var(--warn)" : "var(--accent)";
+}
 
 function openGAS() { window.open(GAS_URL, '_blank'); }
 
@@ -611,11 +643,10 @@ function toMonthKey(date) {
 
 // ── 分割メイン ──
 function doSplit(allConvs) {
-  var maxBytes  = (parseInt(document.getElementById("maxMB").value) || 50) * 1024 * 1024;
-  var mergeMode = document.getElementById("mergeMode").value;
+  var maxBytes  = parseInt(document.getElementById("sizeSlider").value) * 1024 * 1024;
   var groups = {};
   allConvs.forEach(function(item) {
-    var key = mergeMode === "merge" ? "merged" : (item.fmt || "unknown");
+    var key = item.fmt || "unknown";
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
   });
@@ -650,7 +681,7 @@ function doSplit(allConvs) {
 
       parts.forEach(function(partConvs, pi) {
         var partNo   = parts.length > 1 ? (pi + 1) : 0;
-        var srcLabel = fmtKey === "merged" ? "combined" : fmtKey === "chatgpt" ? "chatgpt" : fmtKey === "claude" ? "claude" : "unknown";
+        var srcLabel = fmtKey === "chatgpt" ? "chatgpt" : fmtKey === "claude" ? "claude" : "unknown";
         var fname    = monthKey + "_" + srcLabel + (partNo ? "_part" + partNo : "") + "_conversations.json";
         var sizeMB   = (utf8ByteSize(JSON.stringify(partConvs, null, 2)) / 1024 / 1024).toFixed(2);
         var convTitles = partConvs.map(function(c) {
@@ -688,7 +719,7 @@ function renderResult() {
 
   var totalFiles = splitResult.length;
   var totalConvs = splitResult.reduce(function(a,x){ return a + x.convCount; }, 0);
-  var months     = [...new Set(splitResult.map(function(x){ return x.monthKey; }))].length;
+  var months     = Array.from(new Set(splitResult.map(function(x){ return x.monthKey; }))).length;
 
   var html = '<div class="summary-grid">'
     + summaryBox(totalFiles, "生成ファイル数")
@@ -779,7 +810,7 @@ function downloadAll() {
 }
 
 function buildReportTxt(inputFiles) {
-  var lines = ["================================================================","MDSC JSON Splitter v1.4 - 分割レポート","================================================================","生成日時  : " + new Date().toLocaleString("ja-JP"),"最大サイズ: " + (document.getElementById("maxMB").value||"50") + " MB","","【入力ファイル】"];
+  var lines = ["================================================================","MDSC JSON Splitter v1.4 - 分割レポート","================================================================","生成日時  : " + new Date().toLocaleString("ja-JP"),"最大サイズ: " + (document.getElementById("sizeSlider").value||"10") + " MB","","【入力ファイル】"];
   inputFiles.forEach(function(fn) { lines.push("  - " + fn); });
   lines.push("");
   if (skipLog.length > 0) { lines.push("【スキップしたファイル】"); skipLog.forEach(function(s){ lines.push("  - " + s.filename + "  ← " + s.reason); }); lines.push(""); }
